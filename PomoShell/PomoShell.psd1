@@ -12,7 +12,7 @@
 RootModule = 'PomoShell.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.0'
+ModuleVersion = '1.0.1'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -69,7 +69,7 @@ RequiredModules = @('BurntToast')
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Export-ModuleMember')
+FunctionsToExport = @('Invoke-Pomodoro')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 #CmdletsToExport = ''
