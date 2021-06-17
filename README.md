@@ -73,6 +73,16 @@ You can change it too. For instance:
 Pomo -Interval 3
 ```
 
+### Key bindings
+
+During the pomodoro execution, you can use keys to perform some actions.
+
+| Key | Action |
+|-|-|
+| Space bar | Pause or resume the current phase |
+| `S` | Skip the current phase |
+| `Q` | Stop the pomodoro |
+
 ### Get Help
 
 Use [the `Get-Help` Cmdlet](https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/get-help?view=powershell-7.1) to obtain more information about the `Invoke-Pomodoro` command (Alias `Pomo`):
