@@ -11,15 +11,17 @@ enum PhaseStatus {
     Running
     Paused
     Skipped
+    Aborted
 }
 
 class Phase {
     [string] $Name
     [uint] $Duration  # In minute
     [uint] $Turn
-    [datetime] $StartDate
-    [datetime] $EndDate
-    [PhaseStatus] $Status
+    hidden [PhaseStatus] $Status
+    hidden [datetime] $StartDate
+    hidden [datetime] $EndDate
+    hidden [datetime] $PauseDate
     hidden [uint] $SecondsRemainingAtPause
 
     Phase(
@@ -46,7 +48,7 @@ class Phase {
         if ($this.Status -eq [PhaseStatus]::"Running") {
             Write-Debug -Message ("[Phase] {0} paused." -f $this.Name)
             $this.SecondsRemainingAtPause = $this.GetSecondsRemaining()
-            $this.EndDate = Get-Date
+            $this.PauseDate = Get-Date
             $this.Status = [PhaseStatus]::"Paused"
         }
     }
@@ -65,12 +67,33 @@ class Phase {
         $this.Status = [PhaseStatus]::"Skipped"
     }
 
-    [bool] IsComplete() {
+    [void] Abort() {
+        Write-Debug -Message ("[Phase] {0} aborted." -f $this.Name)
+        $this.EndDate = Get-Date
+        $this.Status = [PhaseStatus]::"Aborted"
+    }
+
+
+    [bool] IsRunning() {
+        if ($this.Status -eq [PhaseStatus]::"Running") {
+            return $true
+        }
+        return $false
+    }
+
+    [bool] IsPaused() {
+        if ($this.Status -eq [PhaseStatus]::"Paused") {
+            return $true
+        }
+        return $false
+    }
+
+    [bool] IsCompleted() {
         switch ($this.Status) {
             $([PhaseStatus]::"New") {
                 return $false
             }
-            $([PhaseStatus]::"Skipped") {
+            $([PhaseStatus]::"Skipped" -or [PhaseStatus]::"Aborted") {
                 return $true
             }
             $([PhaseStatus]::"Paused") {
@@ -89,10 +112,14 @@ class Phase {
     }
 
     [double] GetSecondsRemaining() {
-        if ($this.Status -eq [PhaseStatus]::"Paused") {
+        if ($this.IsPaused()) {
             return $this.SecondsRemainingAtPause
         }
         return ($this.EndDate - (Get-Date)).TotalSeconds
+    }
+
+    [int] GetPercentComplete() {
+        return 100 - (($this.GetSecondsRemaining() / ($this.Duration * 60)) * 100)
     }
 
     [string] GetActivityName() {
@@ -100,14 +127,28 @@ class Phase {
     }
 
     [string] GetStatusDescription() {
-        if ($this.Status -eq [PhaseStatus]::"Running") {
+        if ($this.IsRunning()) {
             return "{0} (ends at {1})" -f $this.Status, $this.EndDate.ToShortTimeString()
+        }
+        elseif ($this.IsPaused()) {
+            return "{0} (at {1})" -f $this.Status, $this.PauseDate.ToShortTimeString()
         }
         return $this.Status
     }
 
-    [int] GetPercentComplete() {
-        return 100 - (($this.GetSecondsRemaining() / ($this.Duration * 60)) * 100)
+    [hashtable] GetEndStats() {
+        if ($this.IsCompleted()) {
+            return @{
+                StartDate = $this.StartDate
+                EndDate = $this.EndDate
+                TotalMinutes = [Math]::Round(($this.EndDate - $this.StartDate).TotalMinutes)
+            }
+        }
+        return $null
+    }
+
+    [string] ToString() {
+        return "{0}, {1} minutes, turn {2}" -f $this.Name, $this.Duration, $this.Turn
     }
 }
 
@@ -305,7 +346,7 @@ function Invoke-Pomodoro {
         $BreakPhase = $false
         $CompletedPhases = @()
         $NotificationOptions = @{
-            NoToast = $NoToastNotification.IsPresent
+            NoToast  = $NoToastNotification.IsPresent
             NoSpeech = $NoVoiceNotification.IsPresent
         }
     }
@@ -314,12 +355,14 @@ function Invoke-Pomodoro {
         if (-not $SkipHelp.IsPresent) {
             Write-HelpMessage
             Write-Debug -Message "[Pomo] help has been shown."
-        } else {
+        }
+        else {
             Write-Debug -Message "[Pomo] Skips help."
         }
 
         Write-Debug -Message "[Pomo] STARTED."
         while ($Continue) {
+            # Create Phase object
             if ($BreakPhase) {
                 if (($Turn % $LongBreakInterval) -eq 0) {
                     $Phase = New-Object -TypeName Phase -ArgumentList "Long Break", $LongBreakDuration, $Turn
@@ -334,14 +377,14 @@ function Invoke-Pomodoro {
                 $Phase = New-Object -TypeName Phase -ArgumentList "Focus", $FocusDuration, $Turn
                 $BreakPhase = $true
             }
+            Write-Debug -Message ("[Pomo] Phase initiated: {0}." -f $Phase.ToString())
 
             $Phase.Start()
-            Write-Debug -Message ("[Phase] {0} started." -f $Phase.Name)
 
             Push-Notification @NotificationOptions -Text ("{0} has started." -f $Phase.Name)
 
             $Host.UI.RawUI.FlushInputBuffer()
-            while (-not $Phase.IsComplete() -and $Continue) {
+            while (-not $Phase.IsCompleted() -and $Continue) {
                 # Key actions
                 if ($Host.UI.RawUI.KeyAvailable) {
                     $Key = $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown")
@@ -349,10 +392,10 @@ function Invoke-Pomodoro {
                     switch ($Key.VirtualKeyCode) {
                         # [Space] Pause/Resume the current phase
                         32 {
-                            if ($Phase.Status -eq [PhaseStatus]::"Running") {
+                            if ($Phase.IsRunning()) {
                                 $Phase.Pause()
                             }
-                            elseif ($Phase.Status -eq [PhaseStatus]::"Paused") {
+                            elseif ($Phase.IsPaused()) {
                                 $Phase.Resume()
                             }
                         }
@@ -369,6 +412,7 @@ function Invoke-Pomodoro {
                                     "y" {
                                         $IsAnswered = $true
                                         $Continue = $false
+                                        $Phase.Abort()
                                         Write-Debug -Message "[Pomo] Stopping..."
                                     }
                                     "n" {
@@ -393,18 +437,21 @@ function Invoke-Pomodoro {
             }
 
             Write-Progress -Activity $Phase.GetActivityName() -Completed
-            Write-Debug -Message ("[Phase] {0} stopped." -f $Phase.Name)
 
             Push-Notification @NotificationOptions -Text ("{0} has ended." -f $Phase.Name)
 
+            $PhaseEndStats = $Phase.GetEndStats()
             $CompletedPhases += [PSCustomObject] @{
                 Phase        = $Phase.Name
                 Turn         = $Phase.Turn
-                Start        = $Phase.StartDate
-                End          = $Phase.EndDate
-                TotalMinutes = [Math]::Round(($Phase.EndDate - $Phase.StartDate).TotalMinutes)
+                Start        = $PhaseEndStats.StartDate
+                End          = $PhaseEndStats.EndDate
+                TotalMinutes = $PhaseEndStats.TotalMinutes
             }
+
+            Write-Debug -Message ("[Pomo] Phase completed: {0}." -f $Phase.ToString())
         }
+
         Write-Debug -Message "[Pomo] STOPPED."
     }
 
