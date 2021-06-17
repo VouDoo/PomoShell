@@ -12,7 +12,7 @@
 RootModule = 'PomoShell.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.1'
+ModuleVersion = '1.0.2'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Core')
@@ -107,7 +107,7 @@ PrivateData = @{
         IconUri = 'https://github.com/VouDoo/PomoShell/blob/main/PomoShell/PomoShell.png'
 
         # ReleaseNotes of this module
-        ReleaseNotes = 'https://github.com/VouDoo/PomoShell/releases'
+        #ReleaseNotes = ''
 
         # Prerelease string of this module
         # Prerelease = ''
