@@ -259,9 +259,6 @@ function Invoke-Pomodoro {
     .PARAMETER NoVoiceNotification
     Interval when a long break is triggered.
 
-    .PARAMETER SkipHelp
-    Skip Help message
-
     .INPUTS
     None. You cannot pipe objects to Invoke-Pomodoro.
 
@@ -314,10 +311,7 @@ function Invoke-Pomodoro {
 
         [Parameter(HelpMessage = "No voice notification will be triggered")]
         [Alias("NoVoice")]
-        [switch] $NoVoiceNotification,
-
-        [Parameter(HelpMessage = "Skip Help message")]
-        [switch] $SkipHelp
+        [switch] $NoVoiceNotification
     )
 
     begin {
