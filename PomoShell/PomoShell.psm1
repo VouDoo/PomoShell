@@ -306,7 +306,7 @@ function Invoke-Pomodoro {
         $CompletedPhases = @()
         $NotificationOptions = @{
             NoToast = $NoToastNotification.IsPresent
-            NoVoice = $NoVoiceNotification.IsPresent
+            NoSpeech = $NoVoiceNotification.IsPresent
         }
     }
 
