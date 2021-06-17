@@ -313,8 +313,12 @@ function Invoke-Pomodoro {
     process {
         if (-not $SkipHelp.IsPresent) {
             Write-HelpMessage
+            Write-Debug -Message "[Pomo] help has been shown."
+        } else {
+            Write-Debug -Message "[Pomo] Skips help."
         }
 
+        Write-Debug -Message "[Pomo] STARTED."
         while ($Continue) {
             if ($BreakPhase) {
                 if (($Turn % $LongBreakInterval) -eq 0) {
@@ -332,7 +336,8 @@ function Invoke-Pomodoro {
             }
 
             $Phase.Start()
-            Write-Debug -Message ("[Pomo] {0} started." -f $Phase.Name)
+            Write-Debug -Message ("[Phase] {0} started." -f $Phase.Name)
+
             Push-Notification @NotificationOptions -Text ("{0} has started." -f $Phase.Name)
 
             $Host.UI.RawUI.FlushInputBuffer()
@@ -364,7 +369,7 @@ function Invoke-Pomodoro {
                                     "y" {
                                         $IsAnswered = $true
                                         $Continue = $false
-                                        Write-Debug -Message "[Pomo] stopping..."
+                                        Write-Debug -Message "[Pomo] Stopping..."
                                     }
                                     "n" {
                                         $IsAnswered = $true
@@ -387,6 +392,11 @@ function Invoke-Pomodoro {
                 #Start-Sleep -Milliseconds 500  # To pause between each loop
             }
 
+            Write-Progress -Activity $Phase.GetActivityName() -Completed
+            Write-Debug -Message ("[Phase] {0} stopped." -f $Phase.Name)
+
+            Push-Notification @NotificationOptions -Text ("{0} has ended." -f $Phase.Name)
+
             $CompletedPhases += [PSCustomObject] @{
                 Phase        = $Phase.Name
                 Turn         = $Phase.Turn
@@ -394,14 +404,12 @@ function Invoke-Pomodoro {
                 End          = $Phase.EndDate
                 TotalMinutes = [Math]::Round(($Phase.EndDate - $Phase.StartDate).TotalMinutes)
             }
-            Write-Progress -Activity $Phase.GetActivityName() -Completed
-            Push-Notification @NotificationOptions -Text ("{0} has ended." -f $Phase.Name)
         }
-        Write-Debug -Message ("[Pomo] {0} stopped." -f $Phase.Name)
+        Write-Debug -Message "[Pomo] STOPPED."
     }
 
     end {
-        Write-Debug -Message ("[Pomo] Return completed phases." -f $Phase.Name)
+        Write-Debug -Message "[Pomo] Returns completed phases."
         $CompletedPhases
     }
 }
