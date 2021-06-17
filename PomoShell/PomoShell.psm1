@@ -116,6 +116,7 @@ function Invoke-Toast {
         [Parameter(Mandatory = $true)]
         [string] $Text
     )
+
     begin {
         $BurntToastNotification = @{
             Text    = "PomoShell", $Text
@@ -124,6 +125,7 @@ function Invoke-Toast {
             Confirm = $false
         }
     }
+
     process {
         try {
             New-BurntToastNotification @BurntToastNotification
@@ -140,6 +142,7 @@ function Invoke-Speech {
         [Parameter(Mandatory = $true)]
         [string] $Text
     )
+
     begin {
         <# SpeechVoiceSpeakFlags
         - SVSFDefault = 0 # Sync
@@ -148,11 +151,19 @@ function Invoke-Speech {
         #>
         $SPVoiceFlag = 0
     }
+
     process {
         try {
             $SPVoice = New-Object -ComObject SAPI.SPVoice
+            $EnglishVoice = $SPVoice.GetVoices() | Where-Object -Property Id -Match ".*\\TTS_MS_EN-.*" | Select-Object -First 1
+            if ($EnglishVoice) {
+                $SPVoice.Voice = $EnglishVoice
+            }
+            else {
+                Write-Warning -Message ("[Speech] No English voice found.")
+            }
             $SPVoice.Speak($Text, $SPVoiceFlag) | Out-Null
-            Write-Debug -Message ("[Speech] Says `"{0}`"." -f $Text)
+            Write-Debug -Message ("[Speech] Says `"{0}`" with `"{1}`"." -f $Text, $SPVoice.Voice.GetDescription())
         }
         catch {
             Write-Error -Message ("[Speech] Cannot say `"{0}`": {1}" -f $Text, $_.Exception.Message)
@@ -160,64 +171,28 @@ function Invoke-Speech {
     }
 }
 
-
 function Push-Notification {
     param(
         [Parameter(Mandatory = $true)]
-        [string] $Text
+        [string] $Text,
+
+        [Parameter()]
+        [bool] $NoToast = $false,
+
+        [Parameter()]
+        [bool] $NoSpeech = $false
     )
     process {
-        Invoke-Toast -Text $Text
-        Invoke-Speech -Text $Text
+        if (-not $NoToast) {
+            Invoke-Toast -Text $Text
+        }
+        if (-not $NoSpeech) {
+            Invoke-Speech -Text $Text
+        }
     }
 }
 
-function Invoke-Pomodoro {
-    <#
-    .SYNOPSIS
-        Invokes pomodoro.
-    .DESCRIPTION
-        Invokes a pomodoro in your Powershell console.
-    .PARAMETER FocusDuration
-        Duration of a focus time in minute.
-    .PARAMETER ShortBreak
-        Duration of a short break time in minute.
-    .PARAMETER LongBreak
-        Duration of a long break time in minute.
-    .PARAMETER Interval
-        Interval when a long break is triggered.
-    .INPUTS
-        None. You cannot pipe objects to Invoke-Pomodoro.
-    .OUTPUTS
-        PSCustomObject. The detailed phases that were done during the execution of the pomodoro.
-    .EXAMPLE
-        PS> Invoke-Pomodoro
-    .EXAMPLE
-        PS> Invoke-Pomodoro -Focus 15 -ShortBreak 3 -LongBreak 10 -Interval 3
-    .LINK
-        https://github.com/VouDoo/PomoShell
-    .NOTES
-        Key bindings:
-            o <Space>: Pause/Resume the current phase.
-            o <S>:     Skip the current phase.
-            o <Q>:     Stop the pomodoro.
-    #>
-
-    [CmdletBinding()]
-    param(
-        [Parameter(HelpMessage = "Duration of a focus time in minute")]
-        [Alias('Focus')]
-        [uint] $FocusDuration = 25,
-        [Parameter(HelpMessage = "Duration of a short break time in minute")]
-        [Alias('ShortBreak')]
-        [uint] $ShortBreakDuration = 5,
-        [Parameter(HelpMessage = "Duration of a long break time in minute")]
-        [Alias('LongBreak')]
-        [uint] $LongBreakDuration = 15,
-        [Parameter(HelpMessage = "Interval when a long break is triggered")]
-        [Alias('Interval')]
-        [uint] $LongBreakInterval = 4
-    )
+function Write-HelpMessage {
     begin {
         $HelpMessage = (
             "PomoShell - A Pomodoro in your PowerShell console`n`n" +
@@ -226,16 +201,120 @@ function Invoke-Pomodoro {
             "`to <S>:     Skip the current phase.`n" +
             "`to <Q>:     Stop the pomodoro.`n"
         )
-        $Continue = $true  # For main loop
+    }
+
+    process {
+        Clear-Host
+        Write-Host $HelpMessage
+        Write-Host "`nPress any key to start the pomodoro... "
+        $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") | Out-Null
+        Clear-Host
+    }
+}
+
+function Invoke-Pomodoro {
+    <#
+    .SYNOPSIS
+    Invokes pomodoro.
+
+    .DESCRIPTION
+    Invokes a pomodoro in your Powershell console.
+
+    .PARAMETER FocusDuration
+    Duration of a focus time in minute.
+
+    .PARAMETER ShortBreakDuration
+    Duration of a short break time in minute.
+
+    .PARAMETER LongBreakDuration
+    Duration of a long break time in minute.
+
+    .PARAMETER LongBreakInterval
+    Interval when a long break is triggered.
+
+    .PARAMETER NoToastNotification
+    Interval when a long break is triggered.
+
+    .PARAMETER NoVoiceNotification
+    Interval when a long break is triggered.
+
+    .PARAMETER SkipHelp
+    Skip Help message
+
+    .INPUTS
+    None. You cannot pipe objects to Invoke-Pomodoro.
+
+    .OUTPUTS
+    PSCustomObject. The detailed phases that were done during the execution of the pomodoro.
+
+    .EXAMPLE
+    PS> Invoke-Pomodoro
+    Start pomodoro with the default durations.
+
+    .EXAMPLE
+    PS> Invoke-Pomodoro -Focus 15 -ShortBreak 3 -LongBreak 10 -Interval 3
+    Start pomodoro with custom durations.
+
+    .EXAMPLE
+    PS> Invoke-Pomodoro -NoToast -NoVoice
+    Start pomodoro with all notifications turned off.
+
+    .LINK
+    GitHub repository: https://github.com/VouDoo/PomoShell
+
+    .NOTES
+    Key bindings:
+        o <Space>: Pause/Resume the current phase.
+        o <S>:     Skip the current phase.
+        o <Q>:     Stop the pomodoro.
+    #>
+
+    [CmdletBinding()]
+    param(
+        [Parameter(HelpMessage = "Duration of a focus time in minute")]
+        [Alias("Focus")]
+        [uint] $FocusDuration = 25,
+
+        [Parameter(HelpMessage = "Duration of a short break time in minute")]
+        [Alias("ShortBreak")]
+        [uint] $ShortBreakDuration = 5,
+
+        [Parameter(HelpMessage = "Duration of a long break time in minute")]
+        [Alias("LongBreak")]
+        [uint] $LongBreakDuration = 15,
+
+        [Parameter(HelpMessage = "Interval when a long break is triggered")]
+        [Alias("Interval")]
+        [uint] $LongBreakInterval = 4,
+
+        [Parameter(HelpMessage = "No Windows Toast notification will be shown")]
+        [Alias("NoToast")]
+        [switch] $NoToastNotification,
+
+        [Parameter(HelpMessage = "No voice notification will be triggered")]
+        [Alias("NoVoice")]
+        [switch] $NoVoiceNotification,
+
+        [Parameter(HelpMessage = "Skip Help message")]
+        [switch] $SkipHelp
+    )
+
+    begin {
+        $Continue = $true  # For the main loop
         $Turn = 1  # turn = focus time + break time
         $BreakPhase = $false
         $CompletedPhases = @()
+        $NotificationOptions = @{
+            NoToast = $NoToastNotification.IsPresent
+            NoVoice = $NoVoiceNotification.IsPresent
+        }
     }
+
     process {
-        Write-Host $HelpMessage
-        Write-Host "Press any key to start the pomodoro... "
-        $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") | Out-Null
-        Clear-Host
+        if (-not $SkipHelp.IsPresent) {
+            Write-HelpMessage
+        }
+
         while ($Continue) {
             if ($BreakPhase) {
                 if (($Turn % $LongBreakInterval) -eq 0) {
@@ -251,9 +330,11 @@ function Invoke-Pomodoro {
                 $Phase = New-Object -TypeName Phase -ArgumentList "Focus", $FocusDuration, $Turn
                 $BreakPhase = $true
             }
+
             $Phase.Start()
             Write-Debug -Message ("[Pomo] {0} started." -f $Phase.Name)
-            Push-Notification -Text ("{0} has started." -f $Phase.Name)
+            Push-Notification @NotificationOptions -Text ("{0} has started." -f $Phase.Name)
+
             $Host.UI.RawUI.FlushInputBuffer()
             while (-not $Phase.IsComplete() -and $Continue) {
                 # Key actions
@@ -295,6 +376,7 @@ function Invoke-Pomodoro {
                     }
                     $Host.UI.RawUI.FlushInputBuffer()
                 }
+
                 $Progress = @{
                     Activity         = $Phase.GetActivityName()
                     Status           = $Phase.GetStatusDescription()
@@ -304,6 +386,7 @@ function Invoke-Pomodoro {
                 Write-Progress @Progress
                 #Start-Sleep -Milliseconds 500  # To pause between each loop
             }
+
             $CompletedPhases += [PSCustomObject] @{
                 Phase        = $Phase.Name
                 Turn         = $Phase.Turn
@@ -312,10 +395,13 @@ function Invoke-Pomodoro {
                 TotalMinutes = [Math]::Round(($Phase.EndDate - $Phase.StartDate).TotalMinutes)
             }
             Write-Progress -Activity $Phase.GetActivityName() -Completed
-            Push-Notification -Text ("{0} has ended." -f $Phase.Name)
+            Push-Notification @NotificationOptions -Text ("{0} has ended." -f $Phase.Name)
         }
+        Write-Debug -Message ("[Pomo] {0} stopped." -f $Phase.Name)
     }
+
     end {
+        Write-Debug -Message ("[Pomo] Return completed phases." -f $Phase.Name)
         $CompletedPhases
     }
 }
