@@ -141,7 +141,7 @@ class Phase {
             return @{
                 StartDate = $this.StartDate
                 EndDate = $this.EndDate
-                TotalMinutes = [Math]::Round(($this.EndDate - $this.StartDate).TotalMinutes)
+                TotalMinutes = [Math]::Floor(($this.EndDate - $this.StartDate).TotalMinutes)
             }
         }
         return $null
@@ -233,27 +233,6 @@ function Push-Notification {
     }
 }
 
-function Write-HelpMessage {
-    begin {
-        $HelpMessage = (
-            "PomoShell - A Pomodoro in your PowerShell console`n`n" +
-            "Key bindings:`n" +
-            "`to <Space>: Pause/Resume the current phase.`n" +
-            "`to <S>:     Skip the current phase.`n" +
-            "`to <Q>:     Stop the pomodoro.`n"
-        )
-    }
-
-    process {
-        Write-Host $HelpMessage
-        Write-Host "Press any key to start the pomodoro... "
-        $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") | Out-Null
-    }
-    end {
-        Clear-Host
-    }
-}
-
 function Invoke-Pomodoro {
     <#
     .SYNOPSIS
@@ -306,7 +285,7 @@ function Invoke-Pomodoro {
 
     .NOTES
     Key bindings:
-        o <Space>: Pause/Resume the current phase.
+        o <Space>: Pause or resume the current phase.
         o <S>:     Skip the current phase.
         o <Q>:     Stop the pomodoro.
     #>
@@ -353,16 +332,6 @@ function Invoke-Pomodoro {
     }
 
     process {
-        Clear-Host
-
-        if (-not $SkipHelp.IsPresent) {
-            Write-HelpMessage
-            Write-Debug -Message "[Pomo] help has been shown."
-        }
-        else {
-            Write-Debug -Message "[Pomo] Skips help."
-        }
-
         Write-Debug -Message "[Pomo] STARTED."
         while ($Continue) {
             # Create Phase object
