@@ -245,10 +245,11 @@ function Write-HelpMessage {
     }
 
     process {
-        Clear-Host
         Write-Host $HelpMessage
-        Write-Host "`nPress any key to start the pomodoro... "
+        Write-Host "Press any key to start the pomodoro... "
         $Host.UI.RawUI.ReadKey("NoEcho, IncludeKeyDown") | Out-Null
+    }
+    end {
         Clear-Host
     }
 }
@@ -352,6 +353,8 @@ function Invoke-Pomodoro {
     }
 
     process {
+        Clear-Host
+
         if (-not $SkipHelp.IsPresent) {
             Write-HelpMessage
             Write-Debug -Message "[Pomo] help has been shown."
