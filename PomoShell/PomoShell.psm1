@@ -183,9 +183,9 @@ function Invoke-Speech {
         <#
         SpeechVoiceSpeakFlags
             o SVSFDefault = 0 # Sync
-            o SVSFlagsAsync = 1 # Async
+            o SVSFlagsAsync = 1 # Async (buggy)
         #>
-        $SPVoiceFlag = 1
+        $SPVoiceFlag = 0
     }
 
     process {
