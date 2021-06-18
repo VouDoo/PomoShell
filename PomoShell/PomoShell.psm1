@@ -35,80 +35,72 @@ class Phase {
         $this.Status = [PhaseStatus]::"New"
     }
 
+    [bool] IsNew() {
+        return $this.Status -eq [PhaseStatus]::"New"
+    }
+
+    [bool] IsRunning() {
+        return $this.Status -eq [PhaseStatus]::"Running"
+    }
+
+    [bool] IsPaused() {
+        return $this.Status -eq [PhaseStatus]::"Paused"
+    }
+
+    [bool] IsSkippedOrAborted() {
+        return $this.Status -in ([PhaseStatus]::"Skipped", [PhaseStatus]::"Aborted")
+    }
+
+    [bool] IsCompleted() {
+        if ($this.IsRunning()) {
+            return (Get-Date) -gt $this.EndDate
+        }
+        elseif ($this.IsPaused()) {
+            return $this.SecondsRemainingAtPause -eq 0
+        }
+        return $this.IsSkippedOrAborted()
+    }
+
     [void] Start() {
-        if ($this.Status -eq [PhaseStatus]::"New") {
-            Write-Debug -Message ("[Phase] {0} started (Turn {1})." -f $this.Name, $this.Turn)
+        if ($this.IsNew()) {
             $this.StartDate = Get-Date
             $this.EndDate = $this.StartDate.AddMinutes($this.Duration)
             $this.Status = [PhaseStatus]::"Running"
+            Write-Debug -Message ("[Phase] {0} started (Turn {1})." -f $this.Name, $this.Turn)
         }
     }
 
     [void] Pause() {
-        if ($this.Status -eq [PhaseStatus]::"Running") {
-            Write-Debug -Message ("[Phase] {0} paused." -f $this.Name)
-            $this.SecondsRemainingAtPause = $this.GetSecondsRemaining()
+        if ($this.IsRunning()) {
             $this.PauseDate = Get-Date
+            $this.SecondsRemainingAtPause = $this.GetSecondsRemaining()
             $this.Status = [PhaseStatus]::"Paused"
+            Write-Debug -Message ("[Phase] {0} paused." -f $this.Name)
         }
     }
 
     [void] Resume() {
-        if ($this.Status -eq [PhaseStatus]::"Paused") {
-            Write-Debug -Message ("[Phase] {0} resumed." -f $this.Name)
+        if ($this.IsPaused()) {
             $this.EndDate = (Get-Date).AddSeconds($this.SecondsRemainingAtPause)
             $this.Status = [PhaseStatus]::"Running"
+            Write-Debug -Message ("[Phase] {0} resumed." -f $this.Name)
         }
     }
 
     [void] Skip() {
-        Write-Debug -Message ("[Phase] {0} skipped." -f $this.Name)
-        $this.EndDate = Get-Date
-        $this.Status = [PhaseStatus]::"Skipped"
+        if (-not $this.IsSkippedOrAborted()) {
+            $this.EndDate = Get-Date
+            $this.Status = [PhaseStatus]::"Skipped"
+            Write-Debug -Message ("[Phase] {0} skipped." -f $this.Name)
+        }
     }
 
     [void] Abort() {
-        Write-Debug -Message ("[Phase] {0} aborted." -f $this.Name)
-        $this.EndDate = Get-Date
-        $this.Status = [PhaseStatus]::"Aborted"
-    }
-
-
-    [bool] IsRunning() {
-        if ($this.Status -eq [PhaseStatus]::"Running") {
-            return $true
+        if (-not $this.IsSkippedOrAborted()) {
+            $this.EndDate = Get-Date
+            $this.Status = [PhaseStatus]::"Aborted"
+            Write-Debug -Message ("[Phase] {0} aborted." -f $this.Name)
         }
-        return $false
-    }
-
-    [bool] IsPaused() {
-        if ($this.Status -eq [PhaseStatus]::"Paused") {
-            return $true
-        }
-        return $false
-    }
-
-    [bool] IsCompleted() {
-        switch ($this.Status) {
-            $([PhaseStatus]::"New") {
-                return $false
-            }
-            $([PhaseStatus]::"Skipped" -or [PhaseStatus]::"Aborted") {
-                return $true
-            }
-            $([PhaseStatus]::"Paused") {
-                if ($this.SecondsRemainingAtPause -gt 0) {
-                    return $false
-                }
-            }
-            $([PhaseStatus]::"Running") {
-                $Now = Get-Date
-                if ($Now -ge $this.StartDate -and $Now -le $this.EndDate) {
-                    return $false
-                }
-            }
-        }
-        return $true
     }
 
     [double] GetSecondsRemaining() {
@@ -133,14 +125,17 @@ class Phase {
         elseif ($this.IsPaused()) {
             return "{0} (at {1})" -f $this.Status, $this.PauseDate.ToShortTimeString()
         }
+        elseif ($this.IsSkippedOrAborted()) {
+            return "{0} (at {1})" -f $this.Status, $this.EndDate.ToShortTimeString()
+        }
         return $this.Status
     }
 
     [hashtable] GetEndStats() {
         if ($this.IsCompleted()) {
             return @{
-                StartDate = $this.StartDate
-                EndDate = $this.EndDate
+                StartDate    = $this.StartDate
+                EndDate      = $this.EndDate
                 TotalMinutes = [Math]::Floor(($this.EndDate - $this.StartDate).TotalMinutes)
             }
         }
@@ -185,12 +180,12 @@ function Invoke-Speech {
     )
 
     begin {
-        <# SpeechVoiceSpeakFlags
-        - SVSFDefault = 0 # Sync
-        - SVSFlagsAsync = 1 # Async
-        Note: If it was me, I would go for asynchronous. Unfortunately, it is buggy...
+        <#
+        SpeechVoiceSpeakFlags
+            o SVSFDefault = 0 # Sync
+            o SVSFlagsAsync = 1 # Async
         #>
-        $SPVoiceFlag = 0
+        $SPVoiceFlag = 1
     }
 
     process {
@@ -224,6 +219,7 @@ function Push-Notification {
         [bool] $NoSpeech = $false
     )
     process {
+        Write-Information -MessageData $Text
         if (-not $NoToast) {
             Invoke-Toast -Text $Text
         }
@@ -235,6 +231,7 @@ function Push-Notification {
 
 function Invoke-Pomodoro {
     <#
+
     .SYNOPSIS
     Invokes pomodoro.
 
@@ -267,14 +264,17 @@ function Invoke-Pomodoro {
 
     .EXAMPLE
     PS> Invoke-Pomodoro
+
     Start pomodoro with the default durations.
 
     .EXAMPLE
     PS> Invoke-Pomodoro -Focus 15 -ShortBreak 3 -LongBreak 10 -Interval 3
+
     Start pomodoro with custom durations.
 
     .EXAMPLE
     PS> Invoke-Pomodoro -NoToast -NoVoice
+
     Start pomodoro with all notifications turned off.
 
     .LINK
@@ -285,6 +285,7 @@ function Invoke-Pomodoro {
         o <Space>: Pause or resume the current phase.
         o <S>:     Skip the current phase.
         o <Q>:     Stop the pomodoro.
+
     #>
 
     [CmdletBinding()]
@@ -315,8 +316,8 @@ function Invoke-Pomodoro {
     )
 
     begin {
-        $Continue = $true  # For the main loop
-        $Turn = 1  # turn = focus time + break time
+        $Continue = $true
+        $Turn = 1
         $BreakPhase = $false
         $CompletedPhases = @()
         $NotificationOptions = @{
@@ -327,6 +328,8 @@ function Invoke-Pomodoro {
 
     process {
         Write-Debug -Message "[Pomo] STARTED."
+
+        #region Main loop
         while ($Continue) {
             # Create Phase object
             if ($BreakPhase) {
@@ -350,6 +353,7 @@ function Invoke-Pomodoro {
             Push-Notification @NotificationOptions -Text ("{0} has started." -f $Phase.Name)
 
             $Host.UI.RawUI.FlushInputBuffer()
+            #region Phase Loop
             while (-not $Phase.IsCompleted() -and $Continue) {
                 # Key actions
                 if ($Host.UI.RawUI.KeyAvailable) {
@@ -399,8 +403,8 @@ function Invoke-Pomodoro {
                     SecondsRemaining = $Phase.GetSecondsRemaining()
                 }
                 Write-Progress @Progress
-                #Start-Sleep -Milliseconds 500  # To pause between each loop
             }
+            #endregion Phase Loop
 
             Write-Progress -Activity $Phase.GetActivityName() -Completed
 
@@ -417,6 +421,7 @@ function Invoke-Pomodoro {
 
             Write-Debug -Message ("[Pomo] Phase completed: {0}." -f $Phase.ToString())
         }
+        #endregion Main loop
 
         Write-Debug -Message "[Pomo] STOPPED."
     }
