@@ -403,6 +403,8 @@ function Invoke-Pomodoro {
                     SecondsRemaining = $Phase.GetSecondsRemaining()
                 }
                 Write-Progress @Progress
+
+                Start-Sleep -Milliseconds 666
             }
             #endregion Phase Loop
 
@@ -420,6 +422,8 @@ function Invoke-Pomodoro {
             }
 
             Write-Debug -Message ("[Pomo] Phase completed: {0}." -f $Phase.ToString())
+
+            Start-Sleep -Seconds 1
         }
         #endregion Main loop
 
